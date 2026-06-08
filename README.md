@@ -159,6 +159,7 @@ GPIO35 -----  A0
 
 ## Integrantes del equipo
 
+- Alejandro Ruiz
 - [Escribir nombres aquí]
 
 ## Profesor/a
@@ -167,4 +168,4 @@ GPIO35 -----  A0
 
 ## Colegio
 
-- [Escribir nombre del colegio aquí]
+- [Colegio Rogelio Salmona IED]
