@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor en Vivo - Estación Ambiental</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; background: #1a1a2e; color: #0f0; padding: 16px; }
+    h1 { color: #00d4ff; font-size: 18px; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 12px; margin-bottom: 16px; }
+    .status { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 8px 12px; background: #16213e; border-radius: 8px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #0f0; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .status-text { color: #0f0; font-size: 12px; }
+    .stats { display: flex; gap: 16px; margin-bottom: 16px; font-size: 11px; color: #888; }
+
+    .sensor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .sensor-box { background: #16213e; border: 1px solid #333; border-radius: 8px; padding: 12px; }
+    .sensor-box.ok { border-color: #0f0; }
+    .sensor-box.warn { border-color: #ff0; }
+    .sensor-box.error { border-color: #f00; }
+    .sensor-name { font-size: 10px; color: #888; text-transform: uppercase; }
+    .sensor-value { font-size: 20px; font-weight: bold; margin-top: 4px; }
+    .sensor-raw { font-size: 10px; color: #555; margin-top: 2px; }
+
+    .log-container { background: #0d1117; border: 1px solid #333; border-radius: 8px; padding: 12px; max-height: 400px; overflow-y: auto; }
+    .log-title { color: #00d4ff; font-size: 12px; margin-bottom: 8px; }
+    .log-entry { font-size: 11px; padding: 4px 0; border-bottom: 1px solid #1a1a2e; line-height: 1.4; }
+    .log-time { color: #555; }
+    .log-ok { color: #0f0; }
+    .log-warn { color: #ff0; }
+    .log-error { color: #f00; }
+    .log-data { color: #00d4ff; }
+  </style>
+</head>
+<body>
+  <h1>📡 Monitor en Vivo</h1>
+  <div class="subtitle">Datos recibidos del ESP32 en tiempo real</div>
+
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span class="status-text" id="status-text">Conectado - Esperando datos...</span>
+  </div>
+
+  <div class="stats">
+    <span>Lecturas: <strong id="total-lecturas">0</strong></span>
+    <span>Última: <strong id="ultima-vez">--</strong></span>
+    <span>Intervalo: <strong id="intervalo">--</strong></span>
+  </div>
+
+  <div class="sensor-grid">
+    <div class="sensor-box" id="box-temp">
+      <div class="sensor-name">🌡️ Temperatura</div>
+      <div class="sensor-value" id="val-temp">--</div>
+      <div class="sensor-raw" id="raw-temp"></div>
+    </div>
+    <div class="sensor-box" id="box-hum">
+      <div class="sensor-name">💧 Humedad</div>
+      <div class="sensor-value" id="val-hum">--</div>
+      <div class="sensor-raw" id="raw-hum"></div>
+    </div>
+    <div class="sensor-box" id="box-pm25">
+      <div class="sensor-name">🌫️ PM2.5</div>
+      <div class="sensor-value" id="val-pm25">--</div>
+      <div class="sensor-raw" id="raw-pm25"></div>
+    </div>
+    <div class="sensor-box" id="box-pm10">
+      <div class="sensor-name">🌫️ PM10</div>
+      <div class="sensor-value" id="val-pm10">--</div>
+      <div class="sensor-raw" id="raw-pm10"></div>
+    </div>
+    <div class="sensor-box" id="box-lluvia">
+      <div class="sensor-name">🌧️ Lluvia</div>
+      <div class="sensor-value" id="val-lluvia">--</div>
+      <div class="sensor-raw" id="raw-lluvia"></div>
+    </div>
+    <div class="sensor-box" id="box-mq135">
+      <div class="sensor-name">📟 MQ135 Raw</div>
+      <div class="sensor-value" id="val-mq135">--</div>
+      <div class="sensor-raw" id="raw-mq135"></div>
+    </div>
+  </div>
+
+  <div class="log-container" id="log-container">
+    <div class="log-title">📋 Log de datos recibidos:</div>
+    <div id="log-entries"></div>
+  </div>
+
+  <script>
+    let ultimoId = 0;
+    let totalLecturas = 0;
+    let ultimaHora = null;
+
+    async function consultarDatos() {
+      try {
+        const res = await fetch('/api/lecturas/ultima');
+        if (!res.ok) throw new Error('Sin datos');
+        const data = await res.json();
+
+        if (data.id !== ultimoId) {
+          ultimoId = data.id;
+          totalLecturas++;
+          const ahora = new Date();
+
+          if (ultimaHora) {
+            const diff = Math.round((ahora - ultimaHora) / 1000);
+            document.getElementById('intervalo').textContent = diff + 's';
+          }
+          ultimaHora = ahora;
+
+          actualizarSensores(data);
+          agregarLog(data);
+
+          document.getElementById('total-lecturas').textContent = totalLecturas;
+          document.getElementById('ultima-vez').textContent = ahora.toLocaleTimeString('es-CO');
+          document.getElementById('status-text').textContent = 'Conectado - Recibiendo datos de ' + data.deviceId;
+          document.getElementById('dot').style.background = '#0f0';
+        }
+      } catch (err) {
+        document.getElementById('status-text').textContent = 'Error: ' + err.message;
+        document.getElementById('dot').style.background = '#f00';
+      }
+    }
+
+    function actualizarSensores(data) {
+      // Temperatura
+      document.getElementById('val-temp').textContent = data.temperatura + '°C';
+      setBoxStatus('box-temp', data.temperatura > 0 && data.temperatura < 50 ? 'ok' : 'error');
+
+      // Humedad
+      document.getElementById('val-hum').textContent = data.humedad + '%';
+      setBoxStatus('box-hum', data.humedad > 0 && data.humedad <= 100 ? 'ok' : 'error');
+
+      // PM2.5
+      document.getElementById('val-pm25').textContent = data.pm25 + ' µg/m³';
+      document.getElementById('raw-pm25').textContent = 'raw: ' + data.mq135Raw;
+      setBoxStatus('box-pm25', data.mq135Raw > 50 ? 'ok' : (data.mq135Raw > 10 ? 'warn' : 'error'));
+
+      // PM10
+      document.getElementById('val-pm10').textContent = data.pm10 + ' µg/m³';
+      setBoxStatus('box-pm10', data.pm10 > 0 ? 'ok' : 'warn');
+
+      // Lluvia
+      document.getElementById('val-lluvia').textContent = data.lluvia ? 'SÍ 🌧️' : 'NO ☀️';
+      document.getElementById('raw-lluvia').textContent = 'raw: ' + data.lluviaRaw + (data.lluviaRaw >= 4095 ? ' (seco)' : data.lluviaRaw < 500 ? ' (mojado)' : ' (húmedo)');
+      setBoxStatus('box-lluvia', data.lluviaRaw < 4095 ? 'warn' : 'ok');
+
+      // MQ135
+      document.getElementById('val-mq135').textContent = data.mq135Raw;
+      document.getElementById('raw-mq135').textContent = data.mq135Raw < 50 ? '⚠️ MUY BAJO - revisar 5V' : data.mq135Raw < 200 ? '✅ Aire limpio' : '⚠️ Contaminación';
+      setBoxStatus('box-mq135', data.mq135Raw > 50 ? 'ok' : 'error');
+    }
+
+    function setBoxStatus(id, status) {
+      const box = document.getElementById(id);
+      box.classList.remove('ok', 'warn', 'error');
+      box.classList.add(status);
+    }
+
+    function agregarLog(data) {
+      const entries = document.getElementById('log-entries');
+      const hora = new Date(data.fecha + 'Z').toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' });
+
+      let alertas = [];
+      if (data.alertas) {
+        if (data.alertas.tempAlta) alertas.push('TEMP_ALTA');
+        if (data.alertas.tempBaja) alertas.push('TEMP_BAJA');
+        if (data.alertas.pm25Alto) alertas.push('PM25_ALTO');
+        if (data.alertas.pm10Alto) alertas.push('PM10_ALTO');
+        if (data.alertas.humedadAlta) alertas.push('HUM_ALTA');
+        if (data.alertas.lluvia) alertas.push('LLUVIA');
+      }
+
+      const mq135Status = data.mq135Raw < 50 ? '<span class="log-error">[MQ135 BAJO - REVISAR 5V]</span>' : '';
+      const alertasStr = alertas.length > 0 ? '<span class="log-warn"> [' + alertas.join(', ') + ']</span>' : '';
+
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML =
+        '<span class="log-time">[' + hora + ']</span> ' +
+        '<span class="log-ok">✓</span> ' +
+        '<span class="log-data">T:' + data.temperatura + '°C H:' + data.humedad + '% PM2.5:' + data.pm25 + ' PM10:' + data.pm10 + ' MQ135raw:' + data.mq135Raw + ' Lluvia:' + (data.lluvia ? 'SÍ' : 'NO') + '(' + data.lluviaRaw + ')</span>' +
+        mq135Status + alertasStr;
+
+      entries.insertBefore(entry, entries.firstChild);
+
+      // Máximo 50 entradas
+      while (entries.children.length > 50) {
+        entries.removeChild(entries.lastChild);
+      }
+    }
+
+    // Consultar cada 5 segundos
+    consultarDatos();
+    setInterval(consultarDatos, 5000);
+  </script>
+</body>
+</html>
