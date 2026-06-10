@@ -142,9 +142,16 @@
       setBoxStatus('box-pm10', data.pm10 > 0 ? 'ok' : 'warn');
 
       // Lluvia
-      document.getElementById('val-lluvia').textContent = data.lluvia ? 'SÍ 🌧️' : 'NO ☀️';
-      document.getElementById('raw-lluvia').textContent = 'raw: ' + data.lluviaRaw + (data.lluviaRaw >= 4095 ? ' (seco)' : data.lluviaRaw < 500 ? ' (mojado)' : ' (húmedo)');
-      setBoxStatus('box-lluvia', data.lluviaRaw < 4095 ? 'warn' : 'ok');
+      var lluviaRaw = data.lluviaRaw;
+      var lluviaTexto, lluviaEmoji, lluviaStatus;
+      if (lluviaRaw >= 3500) { lluviaTexto = 'Seco'; lluviaEmoji = '☀️'; lluviaStatus = 'ok'; }
+      else if (lluviaRaw >= 2500) { lluviaTexto = 'Llovizna'; lluviaEmoji = '🌦️'; lluviaStatus = 'warn'; }
+      else if (lluviaRaw >= 1500) { lluviaTexto = 'Lluvia ligera'; lluviaEmoji = '🌧️'; lluviaStatus = 'warn'; }
+      else if (lluviaRaw >= 500) { lluviaTexto = 'Lluvia moderada'; lluviaEmoji = '⛈️'; lluviaStatus = 'warn'; }
+      else { lluviaTexto = 'Lluvia fuerte'; lluviaEmoji = '🌊'; lluviaStatus = 'error'; }
+      document.getElementById('val-lluvia').textContent = lluviaEmoji + ' ' + lluviaTexto;
+      document.getElementById('raw-lluvia').textContent = 'raw: ' + lluviaRaw;
+      setBoxStatus('box-lluvia', lluviaStatus);
 
       // MQ135
       document.getElementById('val-mq135').textContent = data.mq135Raw;

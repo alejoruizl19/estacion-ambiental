@@ -248,6 +248,22 @@
       }
     }
 
+    // ===== LLUVIA =====
+    function obtenerLluviaTexto(raw) {
+      if (raw >= 3500) return 'Seco';
+      if (raw >= 2500) return 'Llovizna';
+      if (raw >= 1500) return 'Lluvia ligera';
+      if (raw >= 500) return 'Lluvia moderada';
+      return 'Lluvia fuerte';
+    }
+    function obtenerLluviaEmoji(raw) {
+      if (raw >= 3500) return '☀️';
+      if (raw >= 2500) return '🌦️';
+      if (raw >= 1500) return '🌧️';
+      if (raw >= 500) return '⛈️';
+      return '🌊';
+    }
+
     // ===== CALIDAD DEL AIRE =====
     function obtenerCalidad(pm25) {
       if (pm25 <= 12) return { color: '#4CAF50', texto: 'Buena', emoji: '😊' };
@@ -302,8 +318,8 @@
         '<div class="valor">' + lectura.pm10 + ' µg/m³</div>' +
         (alertas.pm10Alto ? '<div class="alerta-texto">⚠️ Alto</div>' : '') + '</div>' +
         '<div class="tarjeta ' + (lectura.lluvia ? 'alerta' : '') + '">' +
-        '<div class="emoji">' + (lectura.lluvia ? '🌧️' : '☀️') + '</div><div class="titulo">Lluvia</div>' +
-        '<div class="valor">' + (lectura.lluvia ? 'Sí' : 'No') + '</div></div>';
+        '<div class="emoji">' + obtenerLluviaEmoji(lectura.lluviaRaw) + '</div><div class="titulo">Lluvia</div>' +
+        '<div class="valor">' + obtenerLluviaTexto(lectura.lluviaRaw) + '</div></div>';
 
       document.getElementById('estado-container').innerHTML =
         '<div class="estado-card"><h3>📊 Estado</h3>' +
