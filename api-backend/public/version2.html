@@ -49,6 +49,7 @@
     .grafica-card .desc { font-size: 11px; color: #888; margin-bottom: 12px; }
     .grafica-canvas { width: 100%; position: relative; }
     canvas { width: 100% !important; height: 220px !important; }
+    @media (min-width: 1024px) { canvas { height: 300px !important; } }
     @media (max-width: 600px) { canvas { height: 180px !important; } }
     .grafica-stats { display: flex; justify-content: space-around; margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; }
     .stat { text-align: center; }
@@ -648,6 +649,10 @@
       var existingChart = Chart.getChart(canvas);
       if (existingChart) existingChart.destroy();
 
+      // Escalar fuente según pantalla
+      var fontSize = window.innerWidth > 1024 ? 14 : window.innerWidth > 768 ? 13 : 11;
+      var pointSize = window.innerWidth > 1024 ? 4 : 3;
+
       new Chart(ctx, {
         type: 'line',
         data: {
@@ -659,8 +664,9 @@
             backgroundColor: 'rgba(46,125,50,0.1)',
             fill: true,
             tension: 0.3,
-            pointRadius: 3,
+            pointRadius: pointSize,
             pointBackgroundColor: '#2E7D32',
+            borderWidth: window.innerWidth > 1024 ? 3 : 2,
           }]
         },
         options: {
@@ -670,8 +676,8 @@
             legend: { display: false },
             tooltip: {
               backgroundColor: '#333',
-              titleFont: { size: 12 },
-              bodyFont: { size: 13 },
+              titleFont: { size: fontSize },
+              bodyFont: { size: fontSize + 1 },
               callbacks: {
                 label: function(ctx) { return 'PM2.5: ' + ctx.parsed.y + ' µg/m³'; }
               }
@@ -681,13 +687,13 @@
             y: {
               beginAtZero: true,
               grid: { color: '#eee' },
-              ticks: { font: { size: 11 }, callback: function(v) { return v + ' µg'; } }
+              ticks: { font: { size: fontSize }, callback: function(v) { return v + ' µg'; } }
             },
             x: {
               grid: { display: false },
               ticks: {
                 maxTicksLimit: maxTicks,
-                font: { size: 11 },
+                font: { size: fontSize },
                 maxRotation: 0,
                 minRotation: 0
               }
