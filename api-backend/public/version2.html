@@ -47,16 +47,16 @@
     .grafica-card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
     .grafica-card h4 { font-size: 14px; margin-bottom: 4px; }
     .grafica-card .desc { font-size: 11px; color: #888; margin-bottom: 12px; }
-    .grafica-canvas { width: 100%; height: 200px; position: relative; }
+    .grafica-canvas { width: 100%; position: relative; }
+    canvas { width: 100% !important; height: 220px !important; }
+    @media (max-width: 600px) { canvas { height: 180px !important; } }
     .grafica-stats { display: flex; justify-content: space-around; margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; }
     .stat { text-align: center; }
-    .stat .label { font-size: 10px; color: #999; }
-    .stat .value { font-size: 16px; font-weight: bold; color: #333; margin-top: 2px; }
+    .stat .label { font-size: 11px; color: #999; }
+    .stat .value { font-size: 15px; font-weight: bold; color: #333; margin-top: 2px; }
     .stat .value.bueno { color: #4CAF50; }
     .stat .value.moderado { color: #FFC107; }
     .stat .value.malo { color: #F44336; }
-
-    canvas { width: 100% !important; height: 200px !important; }
 
     .tarjetas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px; }
     .tarjeta { background: white; padding: 16px; border-radius: 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -522,15 +522,12 @@
 
     async function cargarGraficas() {
       try {
-        // Datos del día (últimas 24h, por hora)
         var resDia = await fetch(API_URL + '/api/lecturas/promedio?horas=24');
         var dataDia = await resDia.json();
 
-        // Datos de la semana (últimas 168h)
         var resSem = await fetch(API_URL + '/api/lecturas/promedio?horas=168');
         var dataSem = await resSem.json();
 
-        // Datos del mes (últimas 720h)
         var resMes = await fetch(API_URL + '/api/lecturas/promedio?horas=720');
         var dataMes = await resMes.json();
 
@@ -549,11 +546,19 @@
       var labels = [];
       var valores = [];
 
+      // Convertir hora UTC a Colombia (-5h) y formatear
       promedios.reverse().forEach(function(p) {
-        var fecha = new Date(p.hora);
-        if (tipo === 'dia') labels.push(fecha.getHours() + ':00');
-        else if (tipo === 'semana') labels.push(fecha.toLocaleDateString('es-CO', { weekday: 'short' }));
-        else labels.push(fecha.getDate() + '/' + (fecha.getMonth()+1));
+        var fechaUTC = new Date(p.hora + 'Z');
+        // Restar 5 horas para Colombia
+        var fechaCO = new Date(fechaUTC.getTime());
+
+        if (tipo === 'dia') {
+          labels.push(fechaCO.toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: false }));
+        } else if (tipo === 'semana') {
+          labels.push(fechaCO.toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'short', day: 'numeric' }));
+        } else {
+          labels.push(fechaCO.toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short' }));
+        }
         valores.push(p.pm25_promedio || 0);
       });
 
@@ -562,12 +567,13 @@
         var prom = (valores.reduce(function(a,b){return a+b;},0) / valores.length).toFixed(1);
         var max = Math.max.apply(null, valores).toFixed(1);
         var min = Math.min.apply(null, valores).toFixed(1);
-        document.getElementById('stat-' + (tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes') + '-prom').textContent = prom + ' µg/m³';
-        document.getElementById('stat-' + (tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes') + '-max').textContent = max;
-        document.getElementById('stat-' + (tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes') + '-min').textContent = min;
+        var prefix = tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes';
+        document.getElementById('stat-' + prefix + '-prom').textContent = prom + ' µg/m³';
+        document.getElementById('stat-' + prefix + '-max').textContent = max + ' µg/m³';
+        document.getElementById('stat-' + prefix + '-min').textContent = min + ' µg/m³';
       }
 
-      // Destruir chart anterior si existe
+      // Destruir chart anterior
       var existingChart = Chart.getChart(canvas);
       if (existingChart) existingChart.destroy();
 
@@ -582,7 +588,8 @@
             backgroundColor: 'rgba(46,125,50,0.1)',
             fill: true,
             tension: 0.3,
-            pointRadius: 2,
+            pointRadius: 3,
+            pointBackgroundColor: '#2E7D32',
           }]
         },
         options: {
@@ -590,11 +597,30 @@
           maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
-            annotation: {}
+            tooltip: {
+              backgroundColor: '#333',
+              titleFont: { size: 12 },
+              bodyFont: { size: 13 },
+              callbacks: {
+                label: function(ctx) { return 'PM2.5: ' + ctx.parsed.y + ' µg/m³'; }
+              }
+            }
           },
           scales: {
-            y: { beginAtZero: true, grid: { color: '#eee' } },
-            x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { size: 10 } } }
+            y: {
+              beginAtZero: true,
+              grid: { color: '#eee' },
+              ticks: { font: { size: 11 }, callback: function(v) { return v + ' µg'; } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: {
+                maxTicksLimit: tipo === 'dia' ? 8 : tipo === 'semana' ? 7 : 10,
+                font: { size: 10 },
+                maxRotation: 45,
+                minRotation: 0
+              }
+            }
           }
         }
       });

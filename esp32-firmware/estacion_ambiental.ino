@@ -29,7 +29,7 @@ const char* DEVICE_ID = "estacion-001";
 #define FC37_PIN 35
 
 // ===== CONFIGURACIÓN DE TIEMPOS =====
-#define INTERVALO_LECTURA 30000  // Enviar datos cada 30 segundos
+#define INTERVALO_LECTURA 15000  // Enviar datos cada 15 segundos
 #define TIEMPO_CALENTAMIENTO_MQ135 180000  // 3 minutos de calentamiento
 
 // ===== UMBRALES DE ALERTA =====
