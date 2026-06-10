@@ -522,58 +522,129 @@
 
     async function cargarGraficas() {
       try {
-        var resDia = await fetch(API_URL + '/api/lecturas/promedio?horas=24');
+        // Día: solo hoy (desde las 00:00 hora Colombia = 05:00 UTC)
+        var ahora = new Date();
+        var hoyColombia = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        var horasDesdeMedianoche = hoyColombia.getHours() + 1;
+
+        var resDia = await fetch(API_URL + '/api/lecturas/promedio?horas=' + horasDesdeMedianoche);
         var dataDia = await resDia.json();
 
+        // Semana: últimos 7 días
         var resSem = await fetch(API_URL + '/api/lecturas/promedio?horas=168');
         var dataSem = await resSem.json();
 
+        // Mes: últimos 30 días
         var resMes = await fetch(API_URL + '/api/lecturas/promedio?horas=720');
         var dataMes = await resMes.json();
 
-        renderGrafica('grafica-dia', dataDia.promedios, 'dia');
-        renderGrafica('grafica-semana', dataSem.promedios, 'semana');
-        renderGrafica('grafica-mes', dataMes.promedios, 'mes');
+        renderGraficaDia('grafica-dia', dataDia.promedios);
+        renderGraficaSemana('grafica-semana', dataSem.promedios);
+        renderGraficaMes('grafica-mes', dataMes.promedios);
       } catch(e) {
         console.log('Error cargando gráficas:', e);
       }
     }
 
-    function renderGrafica(canvasId, promedios, tipo) {
-      var canvas = document.getElementById(canvasId);
-      var ctx = canvas.getContext('2d');
-
+    function renderGraficaDia(canvasId, promedios) {
       var labels = [];
       var valores = [];
 
-      // Convertir hora UTC a Colombia (-5h) y formatear
       promedios.reverse().forEach(function(p) {
-        var fechaUTC = new Date(p.hora + 'Z');
-        // Restar 5 horas para Colombia
-        var fechaCO = new Date(fechaUTC.getTime());
-
-        if (tipo === 'dia') {
-          labels.push(fechaCO.toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: false }));
-        } else if (tipo === 'semana') {
-          labels.push(fechaCO.toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'short', day: 'numeric' }));
-        } else {
-          labels.push(fechaCO.toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short' }));
-        }
+        var fechaCO = new Date(new Date(p.hora + 'Z').toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        var h = fechaCO.getHours();
+        var ampm = h >= 12 ? 'pm' : 'am';
+        var h12 = h % 12 || 12;
+        labels.push(h12 + ' ' + ampm);
         valores.push(p.pm25_promedio || 0);
       });
 
-      // Stats
-      if (valores.length > 0) {
-        var prom = (valores.reduce(function(a,b){return a+b;},0) / valores.length).toFixed(1);
-        var max = Math.max.apply(null, valores).toFixed(1);
-        var min = Math.min.apply(null, valores).toFixed(1);
-        var prefix = tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes';
+      actualizarStats('dia', valores);
+      renderChart(canvasId, labels, valores, 12);
+    }
+
+    function renderGraficaSemana(canvasId, promedios) {
+      // Agrupar por día (dd/mm)
+      var porDia = {};
+      promedios.forEach(function(p) {
+        var fechaCO = new Date(new Date(p.hora + 'Z').toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        var dia = ('0' + fechaCO.getDate()).slice(-2) + '/' + ('0' + (fechaCO.getMonth()+1)).slice(-2);
+        if (!porDia[dia]) porDia[dia] = [];
+        porDia[dia].push(p.pm25_promedio || 0);
+      });
+
+      var labels = [];
+      var valores = [];
+      // Generar últimos 7 días
+      for (var i = 6; i >= 0; i--) {
+        var fecha = new Date();
+        fecha.setDate(fecha.getDate() - i);
+        var fechaCO = new Date(fecha.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        var dia = ('0' + fechaCO.getDate()).slice(-2) + '/' + ('0' + (fechaCO.getMonth()+1)).slice(-2);
+        labels.push(dia);
+        if (porDia[dia]) {
+          var sum = porDia[dia].reduce(function(a,b){return a+b;},0);
+          valores.push(+(sum / porDia[dia].length).toFixed(1));
+        } else {
+          valores.push(0);
+        }
+      }
+
+      actualizarStats('sem', valores);
+      renderChart(canvasId, labels, valores, 7);
+    }
+
+    function renderGraficaMes(canvasId, promedios) {
+      // Agrupar por día (dd/mm)
+      var porDia = {};
+      promedios.forEach(function(p) {
+        var fechaCO = new Date(new Date(p.hora + 'Z').toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        var dia = ('0' + fechaCO.getDate()).slice(-2) + '/' + ('0' + (fechaCO.getMonth()+1)).slice(-2);
+        if (!porDia[dia]) porDia[dia] = [];
+        porDia[dia].push(p.pm25_promedio || 0);
+      });
+
+      var labels = [];
+      var valores = [];
+      // Generar últimos 30 días
+      for (var i = 29; i >= 0; i--) {
+        var fecha = new Date();
+        fecha.setDate(fecha.getDate() - i);
+        var fechaCO = new Date(fecha.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        var dia = ('0' + fechaCO.getDate()).slice(-2) + '/' + ('0' + (fechaCO.getMonth()+1)).slice(-2);
+        labels.push(dia);
+        if (porDia[dia]) {
+          var sum = porDia[dia].reduce(function(a,b){return a+b;},0);
+          valores.push(+(sum / porDia[dia].length).toFixed(1));
+        } else {
+          valores.push(0);
+        }
+      }
+
+      actualizarStats('mes', valores);
+      renderChart(canvasId, labels, valores, 10);
+    }
+
+    function actualizarStats(prefix, valores) {
+      var valoresReales = valores.filter(function(v) { return v > 0; });
+      if (valoresReales.length > 0) {
+        var prom = (valoresReales.reduce(function(a,b){return a+b;},0) / valoresReales.length).toFixed(1);
+        var max = Math.max.apply(null, valoresReales).toFixed(1);
+        var min = Math.min.apply(null, valoresReales).toFixed(1);
         document.getElementById('stat-' + prefix + '-prom').textContent = prom + ' µg/m³';
         document.getElementById('stat-' + prefix + '-max').textContent = max + ' µg/m³';
         document.getElementById('stat-' + prefix + '-min').textContent = min + ' µg/m³';
+      } else {
+        document.getElementById('stat-' + prefix + '-prom').textContent = 'Sin datos';
+        document.getElementById('stat-' + prefix + '-max').textContent = '--';
+        document.getElementById('stat-' + prefix + '-min').textContent = '--';
       }
+    }
 
-      // Destruir chart anterior
+    function renderChart(canvasId, labels, valores, maxTicks) {
+      var canvas = document.getElementById(canvasId);
+      var ctx = canvas.getContext('2d');
+
       var existingChart = Chart.getChart(canvas);
       if (existingChart) existingChart.destroy();
 
@@ -615,9 +686,9 @@
             x: {
               grid: { display: false },
               ticks: {
-                maxTicksLimit: tipo === 'dia' ? 8 : tipo === 'semana' ? 7 : 10,
-                font: { size: 10 },
-                maxRotation: 45,
+                maxTicksLimit: maxTicks,
+                font: { size: 11 },
+                maxRotation: 0,
                 minRotation: 0
               }
             }
