@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#2E7D32">
+  <title>Estación Ambiental v2</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+
+    /* Splash screen */
+    .splash { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 99999; transition: opacity 1s ease; }
+    .splash.oculto { opacity: 0; pointer-events: none; }
+    .splash h1 { color: #4CAF50; font-size: 28px; font-weight: bold; }
+    .splash .linea { width: 40px; height: 3px; background: #4CAF50; border-radius: 2px; margin-top: 12px; }
+
+    .header { background: #2E7D32; color: white; padding: 48px 20px 16px; position: sticky; top: 0; z-index: 9999; display: flex; align-items: center; }
+    .header h1 { font-size: 20px; }
+    .header .sub { font-size: 11px; opacity: 0.8; margin-top: 4px; }
+
+    .contenido { padding-bottom: 70px; }
+    .pantalla { display: none; }
+    .pantalla.activa { display: block; }
+
+    .seccion { margin: 16px; }
+    .seccion h3 { font-size: 15px; margin-bottom: 12px; color: #333; }
+    .seccion p { font-size: 13px; color: #666; margin-bottom: 12px; line-height: 1.5; }
+
+    .mapa-card { border-radius: 12px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); margin-bottom: 16px; background: white; }
+    .mapa-card .titulo { padding: 12px 16px; font-size: 13px; font-weight: bold; color: #333; border-bottom: 1px solid #eee; }
+    .mapa-grande { width: 100%; height: 300px; z-index: 1; position: relative; }
+    .mapa-card.principal { border: 2px solid #2E7D32; box-shadow: 0 4px 12px rgba(46,125,50,0.3); }
+    .mapa-card.principal .titulo { background: #2E7D32; color: white; font-size: 14px; }
+    .mapa-chico { width: 100%; height: 150px; z-index: 1; position: relative; }
+    .mapa-card .info { padding: 10px 16px; font-size: 12px; color: #666; }
+    .mapa-card .info strong { color: #2E7D32; }
+    .mapas-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    @media (max-width: 600px) {
+      .mapas-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .mapas-grid .mapa-card .titulo { font-size: 10px; padding: 6px 8px; }
+      .mapas-grid .mapa-card .info { font-size: 9px; padding: 4px 8px; }
+      .mapas-grid .mapa-chico { height: 100px; }
+    }
+
+    .grafica-card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .grafica-card h4 { font-size: 14px; margin-bottom: 4px; }
+    .grafica-card .desc { font-size: 11px; color: #888; margin-bottom: 12px; }
+    .grafica-canvas { width: 100%; height: 200px; position: relative; }
+    .grafica-stats { display: flex; justify-content: space-around; margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; }
+    .stat { text-align: center; }
+    .stat .label { font-size: 10px; color: #999; }
+    .stat .value { font-size: 16px; font-weight: bold; color: #333; margin-top: 2px; }
+    .stat .value.bueno { color: #4CAF50; }
+    .stat .value.moderado { color: #FFC107; }
+    .stat .value.malo { color: #F44336; }
+
+    canvas { width: 100% !important; height: 200px !important; }
+
+    .tarjetas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px; }
+    .tarjeta { background: white; padding: 16px; border-radius: 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .tarjeta.alerta { border: 2px solid #FF5722; }
+    .tarjeta .emoji { font-size: 32px; }
+    .tarjeta .titulo { font-size: 11px; color: #666; margin-top: 6px; }
+    .tarjeta .valor { font-size: 18px; font-weight: bold; margin-top: 4px; }
+    .tarjeta .alerta-texto { font-size: 10px; color: #FF5722; font-weight: bold; margin-top: 4px; }
+    /* Hamburguesa */
+    .hamburger { background: none; border: none; color: white; font-size: 26px; cursor: pointer; padding: 8px; }
+    .menu-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99990; }
+    .menu-overlay.visible { display: block; }
+    .menu-panel { position: fixed; top: 0; right: -280px; width: 280px; height: 100%; background: white; z-index: 99991; transition: right 0.3s; box-shadow: -2px 0 8px rgba(0,0,0,0.2); overflow-y: auto; }
+    .menu-panel.visible { right: 0; }
+    .menu-header { background: #2E7D32; color: white; padding: 48px 16px 16px; }
+    .menu-header h2 { font-size: 18px; }
+    .menu-item { padding: 14px 16px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 12px; }
+    .menu-item:active { background: #f0f0f0; }
+    .menu-section { padding: 12px 16px 6px; font-size: 11px; color: #999; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
+    .tema-opciones { padding: 8px 16px; }
+    .tema-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; border: 2px solid #eee; cursor: pointer; }
+    .tema-btn.activo { border-color: #2E7D32; }
+    .tema-color { width: 24px; height: 24px; border-radius: 50%; }
+    .tema-nombre { font-size: 13px; font-weight: 500; }
+
+    .calidad-card { margin: 16px; padding: 20px; border-radius: 16px; text-align: center; color: white; }
+    .calidad-card .emoji { font-size: 48px; }
+    .calidad-card .texto { font-size: 14px; margin-top: 8px; }
+    .calidad-card .valor { font-size: 20px; font-weight: bold; margin-top: 4px; }
+    .calidad-card .pm { opacity: 0.9; margin-top: 4px; font-size: 14px; }
+    .estado-card { margin: 16px; padding: 16px; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .estado-card h3 { font-size: 15px; margin-bottom: 8px; }
+    .estado-card p { font-size: 13px; color: #666; margin-top: 4px; }
+
+    .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; border-top: 1px solid #e0e0e0; padding-bottom: env(safe-area-inset-bottom, 8px); z-index: 9998; }
+    .tab { flex: 1; text-align: center; padding: 8px 0; cursor: pointer; }
+    .tab.activo { border-top: 2px solid #2E7D32; }
+    .tab .emoji { font-size: 20px; }
+    .tab .texto { font-size: 10px; color: #999; }
+    .tab.activo .texto { color: #2E7D32; font-weight: bold; }
+
+    /* Panel de Alertas */
+    .alertas-panel { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f5f5f5; z-index: 99995; overflow-y: auto; }
+    .alertas-panel.visible { display: block; }
+    .alertas-panel-header { background: #2E7D32; color: white; padding: 48px 16px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 1; }
+    .alertas-panel-header h2 { font-size: 18px; }
+    .alertas-cerrar { background: none; border: none; color: white; font-size: 28px; cursor: pointer; padding: 8px; }
+    .alerta-item { background: white; padding: 12px; border-radius: 8px; margin: 8px 16px; display: flex; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .alerta-item .icono { font-size: 24px; margin-right: 12px; }
+    .alerta-item .info { flex: 1; }
+    .alerta-item .mensaje { font-size: 13px; color: #333; }
+    .alerta-item .fecha { font-size: 10px; color: #999; margin-top: 2px; }
+
+    /* Tema Oscuro */
+    body.tema-oscuro { background: #121212; color: #e0e0e0; }
+    body.tema-oscuro .header { background: #1e1e1e; }
+    body.tema-oscuro .tarjeta, body.tema-oscuro .estado-card, body.tema-oscuro .mapa-card,
+    body.tema-oscuro .grafica-card { background: #1e1e1e; color: #e0e0e0; }
+    body.tema-oscuro .tarjeta .titulo, body.tema-oscuro .estado-card p { color: #aaa; }
+    body.tema-oscuro .tab-bar { background: #1e1e1e; border-color: #333; }
+    body.tema-oscuro .menu-panel { background: #1e1e1e; color: #e0e0e0; }
+    body.tema-oscuro .menu-item { border-color: #333; color: #e0e0e0; }
+    body.tema-oscuro .seccion h3, body.tema-oscuro .seccion p { color: #ccc; }
+    body.tema-oscuro .mapa-card .titulo { color: #e0e0e0; border-color: #333; }
+    body.tema-oscuro .mapa-card .info { color: #aaa; }
+
+    /* Tema Azul */
+    body.tema-azul .header { background: #1976D2; }
+    body.tema-azul .tab.activo { border-color: #1976D2; }
+    body.tema-azul .tab.activo .texto { color: #1976D2; }
+    body.tema-azul .menu-header { background: #1976D2; }
+  </style>
+</head>
+<body>
+
+  <!-- Splash Screen -->
+  <div class="splash" id="splash">
+    <h1>Bogotá mi casa!</h1>
+    <div class="linea"></div>
+  </div>
+
+  <!-- Menu Hamburguesa -->
+  <div class="menu-overlay" id="menu-overlay" onclick="cerrarMenu()"></div>
+  <div class="menu-panel" id="menu-panel">
+    <div class="menu-header">
+      <h2>⚙️ Configuración</h2>
+    </div>
+    <div class="menu-section">Notificaciones</div>
+    <div class="menu-item" onclick="pedirPermisoNotificaciones()">
+      <span id="menu-notif-icono">🔔</span>
+      <span id="menu-notif-texto">Activar Notificaciones</span>
+    </div>
+    <div class="menu-section">Alertas</div>
+    <div class="menu-item" onclick="abrirAlertas()">
+      <span>⚠️</span>
+      <span>Ver Alertas</span>
+    </div>
+    <div class="menu-section">Servidor</div>
+    <div class="menu-item" style="cursor:default;">
+      <span>📡</span>
+      <span id="menu-servidor">Conectado</span>
+    </div>
+    <div class="menu-section">Tema de colores</div>
+    <div class="tema-opciones">
+      <div class="tema-btn activo" id="tema-default" onclick="cambiarTema('default')">
+        <div class="tema-color" style="background:#2E7D32;"></div>
+        <span class="tema-nombre">Verde (Default)</span>
+      </div>
+      <div class="tema-btn" id="tema-oscuro" onclick="cambiarTema('oscuro')">
+        <div class="tema-color" style="background:#121212;"></div>
+        <span class="tema-nombre">Oscuro</span>
+      </div>
+      <div class="tema-btn" id="tema-azul" onclick="cambiarTema('azul')">
+        <div class="tema-color" style="background:#1976D2;"></div>
+        <span class="tema-nombre">Azul Clásico</span>
+      </div>
+    </div>
+    <div class="menu-section">Info</div>
+    <div class="menu-item" style="cursor:default; font-size:12px; color:#999;">
+      <span>ℹ️</span>
+      <span>Estación Ambiental v2.0</span>
+    </div>
+  </div>
+
+  <div class="header">
+    <div style="flex:1;">
+      <h1>🌿 Estación Ambiental v2</h1>
+      <div class="sub" id="fecha">Monitoreo en tiempo real</div>
+    </div>
+    <button class="hamburger" onclick="abrirMenu()">☰</button>
+  </div>
+
+  <div class="contenido">
+    <!-- Inicio (Dashboard) -->
+    <div class="pantalla activa" id="pantalla-inicio">
+      <div id="calidad-container"></div>
+      <div class="tarjetas" id="tarjetas-container"></div>
+      <div id="estado-container"></div>
+    </div>
+
+    <!-- Mapa -->
+    <div class="pantalla" id="pantalla-mapa">
+      <div class="seccion">
+        <h3>📍 Mapa de Prototipos</h3>
+        <p>Ubicación de los nodos de monitoreo ambiental. Toca un marcador para ver los datos del sensor.</p>
+
+        <div class="mapa-card principal">
+          <div class="titulo">� Prototipo principal — Tu zona (DATOS REALES)</div>
+          <div id="mapa-principal" class="mapa-grande"></div>
+          <div class="info" id="info-principal">
+            <strong>Estación 001</strong> — Cargando datos...
+          </div>
+        </div>
+
+        <h3 style="margin-top:20px;">📡 Otros prototipos en la ciudad</h3>
+        <p>Comparación de condiciones ambientales en diferentes zonas de Bogotá.</p>
+
+        <div class="mapas-grid">
+          <div class="mapa-card">
+            <div class="titulo">📍 Usaquén</div>
+            <div id="mapa-norte" class="mapa-chico"></div>
+            <div class="info"><strong>Estación 002</strong> — Simulado</div>
+          </div>
+
+          <div class="mapa-card">
+            <div class="titulo">📍 La Candelaria</div>
+            <div id="mapa-centro" class="mapa-chico"></div>
+            <div class="info"><strong>Estación 003</strong> — Simulado</div>
+          </div>
+
+          <div class="mapa-card">
+            <div class="titulo">📍 Bosa</div>
+            <div id="mapa-sur" class="mapa-chico"></div>
+            <div class="info"><strong>Estación 004</strong> — Simulado</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gráficas -->
+    <div class="pantalla" id="pantalla-graficas">
+      <div class="seccion">
+        <h3>📊 Gráficas de Contaminación</h3>
+
+        <div class="grafica-card">
+          <h4>📈 Contaminación Hoy</h4>
+          <div class="desc">Niveles de PM2.5 registrados durante el día actual</div>
+          <canvas id="grafica-dia"></canvas>
+          <div class="grafica-stats">
+            <div class="stat"><div class="label">Promedio</div><div class="value" id="stat-dia-prom">--</div></div>
+            <div class="stat"><div class="label">Máximo</div><div class="value" id="stat-dia-max">--</div></div>
+            <div class="stat"><div class="label">Mínimo</div><div class="value" id="stat-dia-min">--</div></div>
+          </div>
+        </div>
+
+        <div class="grafica-card">
+          <h4>📅 Contaminación Semanal</h4>
+          <div class="desc">Evolución de PM2.5 en los últimos 7 días</div>
+          <canvas id="grafica-semana"></canvas>
+          <div class="grafica-stats">
+            <div class="stat"><div class="label">Promedio</div><div class="value" id="stat-sem-prom">--</div></div>
+            <div class="stat"><div class="label">Máximo</div><div class="value" id="stat-sem-max">--</div></div>
+            <div class="stat"><div class="label">Mínimo</div><div class="value" id="stat-sem-min">--</div></div>
+          </div>
+        </div>
+
+        <div class="grafica-card">
+          <h4>📆 Contaminación Mensual</h4>
+          <div class="desc">Evolución de PM2.5 en los últimos 30 días</div>
+          <canvas id="grafica-mes"></canvas>
+          <div class="grafica-stats">
+            <div class="stat"><div class="label">Promedio</div><div class="value" id="stat-mes-prom">--</div></div>
+            <div class="stat"><div class="label">Máximo</div><div class="value" id="stat-mes-max">--</div></div>
+            <div class="stat"><div class="label">Mínimo</div><div class="value" id="stat-mes-min">--</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel de Alertas (fullscreen) -->
+  <div class="alertas-panel" id="alertas-panel">
+    <div class="alertas-panel-header">
+      <h2>⚠️ Alertas</h2>
+      <button class="alertas-cerrar" onclick="cerrarAlertas()">✕</button>
+    </div>
+    <div id="alertas-contenido" style="padding-bottom:20px;">
+      <p style="text-align:center;color:#999;padding:32px;">Cargando...</p>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <div class="tab activo" onclick="cambiarPantalla('inicio', this)">
+      <div class="emoji">🏠</div>
+      <div class="texto">Inicio</div>
+    </div>
+    <div class="tab" onclick="cambiarPantalla('mapa', this)">
+      <div class="emoji">🗺️</div>
+      <div class="texto">Mapa</div>
+    </div>
+    <div class="tab" onclick="cambiarPantalla('graficas', this)">
+      <div class="emoji">📊</div>
+      <div class="texto">Gráficas</div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    const API_URL = '';
+
+    // ===== SPLASH =====
+    setTimeout(function() {
+      document.getElementById('splash').classList.add('oculto');
+    }, 1000);
+
+    // ===== MENÚ HAMBURGUESA =====
+    function abrirMenu() {
+      document.getElementById('menu-overlay').classList.add('visible');
+      document.getElementById('menu-panel').classList.add('visible');
+    }
+    function cerrarMenu() {
+      document.getElementById('menu-overlay').classList.remove('visible');
+      document.getElementById('menu-panel').classList.remove('visible');
+    }
+
+    // ===== TEMAS =====
+    function cambiarTema(tema) {
+      document.body.className = '';
+      document.querySelectorAll('.tema-btn').forEach(b => b.classList.remove('activo'));
+      if (tema === 'oscuro') document.body.classList.add('tema-oscuro');
+      else if (tema === 'azul') document.body.classList.add('tema-azul');
+      document.getElementById('tema-' + tema).classList.add('activo');
+      localStorage.setItem('tema-v2', tema);
+    }
+    function cargarTema() {
+      var tema = localStorage.getItem('tema-v2') || 'default';
+      cambiarTema(tema);
+    }
+
+    // ===== NOTIFICACIONES =====
+    let notificacionesActivas = false;
+    function pedirPermisoNotificaciones() {
+      if (notificacionesActivas) {
+        notificacionesActivas = false;
+        localStorage.setItem('notificaciones-v2', 'false');
+        document.getElementById('menu-notif-icono').textContent = '🔔';
+        document.getElementById('menu-notif-texto').textContent = 'Activar Notificaciones';
+      } else {
+        notificacionesActivas = true;
+        localStorage.setItem('notificaciones-v2', 'true');
+        document.getElementById('menu-notif-icono').textContent = '🔕';
+        document.getElementById('menu-notif-texto').textContent = 'Desactivar Notificaciones';
+        if ('vibrate' in navigator) navigator.vibrate(200);
+      }
+    }
+
+    // ===== ALERTAS PANEL =====
+    function abrirAlertas() {
+      cerrarMenu();
+      document.getElementById('alertas-panel').classList.add('visible');
+      cargarAlertasPanel();
+    }
+    function cerrarAlertas() {
+      document.getElementById('alertas-panel').classList.remove('visible');
+    }
+    async function cargarAlertasPanel() {
+      try {
+        var res = await fetch(API_URL + '/api/alertas');
+        var data = await res.json();
+        var alertas = data.alertas || [];
+        var TIPOS = { TEMP_ALTA:'🌡️', TEMP_BAJA:'🥶', HUMEDAD_ALTA:'💧', PM25_ALTO:'🌫️', PM10_ALTO:'🌫️', LLUVIA:'🌧️' };
+        if (alertas.length === 0) {
+          document.getElementById('alertas-contenido').innerHTML = '<p style="text-align:center;color:#999;padding:32px;">✅ No hay alertas</p>';
+          return;
+        }
+        var html = '';
+        alertas.forEach(function(a) {
+          html += '<div class="alerta-item"><div class="icono">' + (TIPOS[a.tipo] || '⚠️') + '</div>' +
+            '<div class="info"><div class="mensaje">' + a.mensaje + '</div>' +
+            '<div class="fecha">' + new Date(a.fecha + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota' }) + '</div></div></div>';
+        });
+        document.getElementById('alertas-contenido').innerHTML = html;
+      } catch(e) {
+        document.getElementById('alertas-contenido').innerHTML = '<p style="color:red;padding:16px;">Error cargando alertas</p>';
+      }
+    }
+
+    // ===== NAVEGACIÓN =====
+    function cambiarPantalla(nombre, tab) {
+      document.querySelectorAll('.pantalla').forEach(p => p.classList.remove('activa'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('activo'));
+      document.getElementById('pantalla-' + nombre).classList.add('activa');
+      tab.classList.add('activo');
+      if (nombre === 'mapa') setTimeout(initMapas, 100);
+      if (nombre === 'graficas') cargarGraficas();
+    }
+
+    // ===== DASHBOARD =====
+    function obtenerCalidad(pm25) {
+      if (pm25 <= 12) return { color: '#4CAF50', texto: 'Buena', emoji: '😊' };
+      if (pm25 <= 35.4) return { color: '#FFC107', texto: 'Moderada', emoji: '😐' };
+      if (pm25 <= 55.4) return { color: '#FF9800', texto: 'Insalubre (sensibles)', emoji: '😷' };
+      if (pm25 <= 150.4) return { color: '#F44336', texto: 'Insalubre', emoji: '🤢' };
+      return { color: '#9C27B0', texto: 'Muy insalubre', emoji: '☠️' };
+    }
+    function obtenerLluviaTexto(raw) {
+      if (raw >= 3500) return 'Seco';
+      if (raw >= 2500) return 'Llovizna';
+      if (raw >= 1500) return 'Lluvia ligera';
+      if (raw >= 500) return 'Lluvia moderada';
+      return 'Lluvia fuerte';
+    }
+    function obtenerLluviaEmoji(raw) {
+      if (raw >= 3500) return '☀️';
+      if (raw >= 2500) return '🌦️';
+      if (raw >= 1500) return '🌧️';
+      if (raw >= 500) return '⛈️';
+      return '🌊';
+    }
+
+    async function cargarDashboard() {
+      try {
+        var res = await fetch(API_URL + '/api/lecturas/ultima');
+        var estadoRes = await fetch(API_URL + '/api/estado');
+        if (!res.ok) return;
+        var lectura = await res.json();
+        var estado = await estadoRes.json();
+
+        document.getElementById('fecha').textContent =
+          'Última lectura: ' + new Date(lectura.fecha + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+
+        var calidad = obtenerCalidad(lectura.pm25);
+        document.getElementById('calidad-container').innerHTML =
+          '<div class="calidad-card" style="background:' + calidad.color + '">' +
+          '<div class="emoji">' + calidad.emoji + '</div>' +
+          '<div class="texto">Calidad del Aire</div>' +
+          '<div class="valor">' + calidad.texto + '</div>' +
+          '<div class="pm">PM2.5: ' + lectura.pm25 + ' µg/m³</div></div>';
+
+        var alertas = lectura.alertas || {};
+        document.getElementById('tarjetas-container').innerHTML =
+          '<div class="tarjeta ' + (alertas.tempAlta || alertas.tempBaja ? 'alerta' : '') + '">' +
+          '<div class="emoji">🌡️</div><div class="titulo">Temperatura</div>' +
+          '<div class="valor">' + lectura.temperatura + '°C</div></div>' +
+          '<div class="tarjeta ' + (alertas.humedadAlta ? 'alerta' : '') + '">' +
+          '<div class="emoji">💧</div><div class="titulo">Humedad</div>' +
+          '<div class="valor">' + lectura.humedad + '%</div></div>' +
+          '<div class="tarjeta ' + (alertas.pm10Alto ? 'alerta' : '') + '">' +
+          '<div class="emoji">🌫️</div><div class="titulo">PM10</div>' +
+          '<div class="valor">' + lectura.pm10 + ' µg/m³</div></div>' +
+          '<div class="tarjeta">' +
+          '<div class="emoji">' + obtenerLluviaEmoji(lectura.lluviaRaw) + '</div><div class="titulo">Lluvia</div>' +
+          '<div class="valor">' + obtenerLluviaTexto(lectura.lluviaRaw) + '</div></div>';
+
+        document.getElementById('estado-container').innerHTML =
+          '<div class="estado-card"><h3>📊 Estado</h3>' +
+          '<p>Lecturas totales: ' + estado.totalLecturas + '</p>' +
+          '<p>Alertas pendientes: ' + estado.alertasNoLeidas + '</p></div>';
+      } catch(e) {}
+    }
+
+    // ===== MAPAS =====
+    const PROTOTIPOS = [
+      { id: 'principal', lat: 4.5875353, lng: -74.1571678, nombre: 'Estación 001', zona: 'Tu zona', real: true },
+      { id: 'norte', lat: 4.6964, lng: -74.0310, nombre: 'Estación 002', zona: 'Usaquén', real: false },
+      { id: 'centro', lat: 4.5964, lng: -74.0729, nombre: 'Estación 003', zona: 'La Candelaria', real: false },
+      { id: 'sur', lat: 4.6264, lng: -74.1839, nombre: 'Estación 004', zona: 'Bosa', real: false },
+    ];
+
+    let mapasInit = false;
+    let mapasObj = [];
+
+    function initMapas() {
+      if (mapasInit) {
+        // Si ya están creados, solo refrescar tamaño
+        mapasObj.forEach(function(m) { m.invalidateSize(); });
+        return;
+      }
+      mapasInit = true;
+
+      PROTOTIPOS.forEach(function(p) {
+        var mapId = 'mapa-' + p.id;
+        var el = document.getElementById(mapId);
+        if (!el) return;
+
+        var m = L.map(mapId).setView([p.lat, p.lng], p.id === 'principal' ? 15 : 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19, attribution: '© OpenStreetMap'
+        }).addTo(m);
+
+        var icono = L.divIcon({
+          html: '<div style="font-size:28px;text-align:center;">' + (p.real ? '📡' : '📍') + '</div>',
+          iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32], className: ''
+        });
+
+        L.marker([p.lat, p.lng], { icon: icono }).addTo(m)
+          .bindPopup('<strong>' + p.nombre + '</strong><br>' + p.zona + (p.real ? '<br>✅ Datos reales' : '<br>⚪ Simulado'));
+
+        L.circle([p.lat, p.lng], { color: '#2E7D32', fillColor: '#2E7D32', fillOpacity: 0.1, radius: 150 }).addTo(m);
+
+        mapasObj.push(m);
+      });
+
+      // Refrescar tamaño después de un momento
+      setTimeout(function() { mapasObj.forEach(function(m) { m.invalidateSize(); }); }, 300);
+
+      cargarInfoPrincipal();
+    }
+
+    async function cargarInfoPrincipal() {
+      try {
+        var res = await fetch(API_URL + '/api/lecturas/ultima');
+        var data = await res.json();
+        document.getElementById('info-principal').innerHTML =
+          '<strong>Estación 001</strong> — T: ' + data.temperatura + '°C | H: ' + data.humedad + '% | PM2.5: ' + data.pm25 + ' µg/m³';
+      } catch(e) {}
+    }
+
+    // ===== GRÁFICAS =====
+    let chartDia = null, chartSemana = null, chartMes = null;
+
+    async function cargarGraficas() {
+      try {
+        // Datos del día (últimas 24h, por hora)
+        var resDia = await fetch(API_URL + '/api/lecturas/promedio?horas=24');
+        var dataDia = await resDia.json();
+
+        // Datos de la semana (últimas 168h)
+        var resSem = await fetch(API_URL + '/api/lecturas/promedio?horas=168');
+        var dataSem = await resSem.json();
+
+        // Datos del mes (últimas 720h)
+        var resMes = await fetch(API_URL + '/api/lecturas/promedio?horas=720');
+        var dataMes = await resMes.json();
+
+        renderGrafica('grafica-dia', dataDia.promedios, 'dia');
+        renderGrafica('grafica-semana', dataSem.promedios, 'semana');
+        renderGrafica('grafica-mes', dataMes.promedios, 'mes');
+      } catch(e) {
+        console.log('Error cargando gráficas:', e);
+      }
+    }
+
+    function renderGrafica(canvasId, promedios, tipo) {
+      var canvas = document.getElementById(canvasId);
+      var ctx = canvas.getContext('2d');
+
+      var labels = [];
+      var valores = [];
+
+      promedios.reverse().forEach(function(p) {
+        var fecha = new Date(p.hora);
+        if (tipo === 'dia') labels.push(fecha.getHours() + ':00');
+        else if (tipo === 'semana') labels.push(fecha.toLocaleDateString('es-CO', { weekday: 'short' }));
+        else labels.push(fecha.getDate() + '/' + (fecha.getMonth()+1));
+        valores.push(p.pm25_promedio || 0);
+      });
+
+      // Stats
+      if (valores.length > 0) {
+        var prom = (valores.reduce(function(a,b){return a+b;},0) / valores.length).toFixed(1);
+        var max = Math.max.apply(null, valores).toFixed(1);
+        var min = Math.min.apply(null, valores).toFixed(1);
+        document.getElementById('stat-' + (tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes') + '-prom').textContent = prom + ' µg/m³';
+        document.getElementById('stat-' + (tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes') + '-max').textContent = max;
+        document.getElementById('stat-' + (tipo === 'dia' ? 'dia' : tipo === 'semana' ? 'sem' : 'mes') + '-min').textContent = min;
+      }
+
+      // Destruir chart anterior si existe
+      var existingChart = Chart.getChart(canvas);
+      if (existingChart) existingChart.destroy();
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'PM2.5 (µg/m³)',
+            data: valores,
+            borderColor: '#2E7D32',
+            backgroundColor: 'rgba(46,125,50,0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            annotation: {}
+          },
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#eee' } },
+            x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    // ===== INICIO =====
+    cargarTema();
+    cargarDashboard();
+    setInterval(cargarDashboard, 10000);
+    setTimeout(initMapas, 2500);
+    document.getElementById('menu-servidor').textContent = 'Conectado — ' + window.location.origin;
+    if (localStorage.getItem('notificaciones-v2') === 'true') {
+      notificacionesActivas = true;
+      document.getElementById('menu-notif-icono').textContent = '🔕';
+      document.getElementById('menu-notif-texto').textContent = 'Desactivar Notificaciones';
+    }
+  </script>
+</body>
+</html>
