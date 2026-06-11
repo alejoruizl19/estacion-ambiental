@@ -549,6 +549,7 @@
       document.getElementById('modal-valor').style.fontSize = '14px';
       document.getElementById('modal-significado').innerHTML = contenido;
       document.getElementById('modal-recoleccion').textContent = '';
+      document.getElementById('modal-recoleccion').parentElement.style.display = 'none';
       document.getElementById('modal-overlay').classList.add('visible');
     }
 
@@ -617,8 +618,10 @@
       document.getElementById('modal-emoji').textContent = info.emoji;
       document.getElementById('modal-titulo').textContent = info.titulo;
       document.getElementById('modal-valor').textContent = (tipo === 'lluvia') ? val : val + info.unidad;
-      document.getElementById('modal-significado').textContent = info.significado(val);
+      document.getElementById('modal-valor').style.fontSize = '';
+      document.getElementById('modal-significado').innerHTML = info.significado(val);
       document.getElementById('modal-recoleccion').textContent = info.recoleccion;
+      document.getElementById('modal-recoleccion').parentElement.style.display = '';
       document.getElementById('modal-overlay').classList.add('visible');
     }
 
@@ -671,7 +674,8 @@
           '<div class="valor">' + lectura.humedad + '%</div></div>' +
           '<div class="tarjeta" onclick="abrirModal(\'lluvia\')">' +
           '<div class="emoji">' + obtenerLluviaEmoji(lectura.lluviaRaw) + '</div><div class="titulo">Lluvia</div>' +
-          '<div class="valor" style="font-size:14px;">' + obtenerLluviaTexto(lectura.lluviaRaw) + '</div></div>' +
+          '<div class="valor" style="font-size:14px;">' + obtenerLluviaTexto(lectura.lluviaRaw) + '</div>' +
+          '<div style="font-size:9px;color:#999;margin-top:4px;">raw: ' + lectura.lluviaRaw + '</div></div>' +
           '</div>';
       } catch(e) {}
     }
