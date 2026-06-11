@@ -265,12 +265,32 @@
     }
 
     // ===== CALIDAD DEL AIRE =====
-    function obtenerCalidad(pm25) {
-      if (pm25 <= 12) return { color: '#4CAF50', texto: 'Buena', emoji: '😊' };
-      if (pm25 <= 35.4) return { color: '#FFC107', texto: 'Moderada', emoji: '😐' };
-      if (pm25 <= 55.4) return { color: '#FF9800', texto: 'Insalubre (sensibles)', emoji: '😷' };
-      if (pm25 <= 150.4) return { color: '#F44336', texto: 'Insalubre', emoji: '🤢' };
-      return { color: '#9C27B0', texto: 'Muy insalubre', emoji: '☠️' };
+    function obtenerCalidad(pm25, pm10) {
+      var nivelPm25;
+      if (pm25 <= 12) nivelPm25 = 0;
+      else if (pm25 <= 35.4) nivelPm25 = 1;
+      else if (pm25 <= 55.4) nivelPm25 = 2;
+      else if (pm25 <= 150.4) nivelPm25 = 3;
+      else nivelPm25 = 4;
+
+      var nivelPm10 = 0;
+      if (pm10 !== undefined) {
+        if (pm10 <= 54) nivelPm10 = 0;
+        else if (pm10 <= 154) nivelPm10 = 1;
+        else if (pm10 <= 254) nivelPm10 = 2;
+        else if (pm10 <= 354) nivelPm10 = 3;
+        else nivelPm10 = 4;
+      }
+
+      var nivel = Math.max(nivelPm25, nivelPm10);
+      var clasificaciones = [
+        { color: '#4CAF50', texto: 'Buena', emoji: '😊' },
+        { color: '#FFC107', texto: 'Moderada', emoji: '😐' },
+        { color: '#FF9800', texto: 'Insalubre (sensibles)', emoji: '😷' },
+        { color: '#F44336', texto: 'Insalubre', emoji: '🤢' },
+        { color: '#9C27B0', texto: 'Muy insalubre', emoji: '☠️' }
+      ];
+      return clasificaciones[nivel];
     }
 
     // ===== CARGAR DATOS =====
@@ -294,13 +314,13 @@
       document.getElementById('fecha').textContent =
         'Última lectura: ' + new Date(lectura.fecha + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota' });
 
-      const calidad = obtenerCalidad(lectura.pm25);
+      const calidad = obtenerCalidad(lectura.pm25, lectura.pm10);
       document.getElementById('calidad-container').innerHTML =
         '<div class="calidad-card" style="background:' + calidad.color + '">' +
         '<div class="emoji">' + calidad.emoji + '</div>' +
         '<div class="texto">Calidad del Aire</div>' +
         '<div class="valor">' + calidad.texto + '</div>' +
-        '<div class="pm">PM2.5: ' + lectura.pm25 + ' µg/m³</div></div>';
+        '<div class="pm">PM2.5: ' + lectura.pm25 + ' µg/m³ | PM10: ' + lectura.pm10 + ' µg/m³</div></div>';
 
       const alertas = lectura.alertas || {};
       document.getElementById('tarjetas-container').innerHTML =
